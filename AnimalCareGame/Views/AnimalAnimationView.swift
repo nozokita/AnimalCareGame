@@ -46,9 +46,9 @@ struct AnimalAnimationView: View {
                     .onAppear {
                         startAnimationIfNeeded()
                     }
-                    .onChange(of: isFeeding) { _ in startAnimationIfNeeded() }
-                    .onChange(of: isPlaying) { _ in startAnimationIfNeeded() }
-                    .onChange(of: isPetting) { _ in startAnimationIfNeeded() }
+                    .onChange(of: isFeeding) { startAnimationIfNeeded() }
+                    .onChange(of: isPlaying) { startAnimationIfNeeded() }
+                    .onChange(of: isPetting) { startAnimationIfNeeded() }
                 
                 // 状態によるテキストオーバーレイ
                 if let overlayText = getOverlayText() {

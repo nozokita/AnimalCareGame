@@ -2,135 +2,208 @@ import SwiftUI
 
 struct AnimalCareView: View {
     @ObservedObject var viewModel: AnimalCareViewModel
-    @Environment(\.colorScheme) var colorScheme
-    @Environment(\.dismiss) var dismiss
     
     var body: some View {
         ZStack {
-            // 背景色
-            Color(UIColor.systemGroupedBackground)
+            // 背景画像（昼/夜で切り替え）
+            Image(viewModel.isDaytime ? "bg_room_day_portrait" : "bg_room_night_portrait")
+                .resizable()
+                .scaledToFill()
                 .ignoresSafeArea()
             
-            if let animal = viewModel.selectedAnimal {
-                // 選択された動物がいる場合
-                VStack(spacing: 24) {
-                    // ヘッダー
-                    HStack {
-                        Button(action: {
-                            dismiss()
-                        }) {
-                            Image(systemName: "chevron.left")
-                                .font(.title2)
-                                .foregroundColor(.primary)
-                        }
-                        
-                        Spacer()
-                        
-                        Text("\(animal.name)のお世話")
+            VStack {
+                // ヘッダー
+                HStack {
+                    Button {
+                        viewModel.returnToModeSelection()
+                    } label: {
+                        Image(systemName: "chevron.left")
                             .font(.title2)
-                            .fontWeight(.bold)
+                            .padding(10)
+                            .background(Color.white.opacity(0.7))
+                            .clipShape(Circle())
+                    }
+                    
+                    Spacer()
+                    
+                    VStack(spacing: 4) {
+                        Text(viewModel.puppyName == "まだ名前がありません" ? "どうぶつのおへや" : viewModel.puppyName)
+                            .font(.title2.bold())
                         
-                        Spacer()
-                        
-                        Button(action: {
-                            viewModel.toggleSound()
-                        }) {
-                            Image(systemName: viewModel.isSoundEnabled ? "speaker.wave.2.fill" : "speaker.slash.fill")
-                                .font(.title2)
-                                .foregroundColor(.primary)
+                        if viewModel.puppyName != "まだ名前がありません" {
+                            Text("\(viewModel.puppyDaysWithYou)日目")
+                                .font(.subheadline)
+                                .foregroundColor(.secondary)
                         }
                     }
+                    
+                    Spacer()
+                    
+                    // デモ用に昼夜切り替えボタンを追加（開発用）
+                    Button {
+                        viewModel.toggleTimeOfDay()
+                    } label: {
+                        Image(systemName: viewModel.isDaytime ? "sun.max.fill" : "moon.fill")
+                            .font(.title2)
+                            .foregroundColor(viewModel.isDaytime ? .orange : .indigo)
+                            .padding(10)
+                            .background(Color.white.opacity(0.7))
+                            .clipShape(Circle())
+                    }
+                }
+                .padding(.horizontal)
+                .padding(.top, 10)
+                
+                Spacer()
+                
+                // メインコンテンツエリア
+                ZStack {
+                    // 子犬の表示
+                    puppyView
+                    
+                    // うんちの表示
+                    poopView
+                }
+                
+                Spacer()
+                
+                // ステータスバー
+                statusBarsView
                     .padding(.horizontal)
-                    
-                    ScrollView {
-                        VStack(spacing: 24) {
-                            // 動物のアニメーションビュー
-                            AnimalAnimationView(
-                                animal: animal,
-                                isFeeding: viewModel.isFeeding,
-                                isPlaying: viewModel.isPlaying,
-                                isPetting: viewModel.isPetting
-                            )
-                            .padding(.top, 10)
-                            
-                            // ステータスカード
-                            statusCard(animal)
-                                .padding(.horizontal)
-                            
-                            // アクションボタン
-                            actionButtons(animal)
-                                .padding(.horizontal)
-                                .padding(.bottom, 24)
-                        }
-                    }
-                }
-                .padding(.top)
-            } else {
-                // 選択された動物がいない場合
-                VStack {
-                    Text("動物が選択されていません")
-                        .font(.title2)
-                        .foregroundColor(.secondary)
-                    
-                    Button(action: {
-                        dismiss()
-                    }) {
-                        Text("戻る")
-                            .fontWeight(.semibold)
-                            .padding()
-                            .background(Color.accentColor)
-                            .foregroundColor(.white)
-                            .cornerRadius(10)
-                    }
-                    .padding(.top)
-                }
+                
+                // アクションボタン
+                actionButtonsView
+                    .padding(.horizontal)
+                    .padding(.bottom)
+            }
+            
+            // 子犬が不在の場合のオーバーレイ
+            if viewModel.isPuppyMissing {
+                missingPuppyOverlay
+            }
+            
+            // 名前入力が必要な場合のオーバーレイ（初回のみ）
+            if viewModel.puppyName == "まだ名前がありません" {
+                nameInputOverlay
             }
         }
         .onAppear {
-            viewModel.updateAllAnimalsStatus()
+            // 画面表示時に子犬の状態を更新
+            viewModel.updatePuppyStatus()
+            viewModel.startTimeOfDayTimer()
+        }
+        .onDisappear {
+            viewModel.stopTimeOfDayTimer()
         }
     }
     
-    // ステータスカード
-    private func statusCard(_ animal: Animal) -> some View {
-        VStack(spacing: 16) {
-            // 満腹度
-            statusBar(
-                title: "おなか",
-                value: animal.hunger,
-                maxValue: 100,
-                icon: "fork.knife",
-                color: animal.hungerStatus.color
-            )
-            
-            // 幸福度
-            statusBar(
-                title: "きもち",
-                value: animal.happiness,
-                maxValue: 100,
-                icon: "heart.fill",
-                color: animal.happinessStatus.color
-            )
+    // 子犬の表示
+    private var puppyView: some View {
+        ZStack {
+            if viewModel.isPuppyMissing {
+                Image("puppy_missing")
+                    .resizable()
+                    .scaledToFit()
+                    .frame(height: 200)
+            } else if viewModel.showEatingAnimation {
+                Image("puppy_eating_1")
+                    .resizable()
+                    .scaledToFit()
+                    .frame(height: 200)
+            } else if viewModel.showPlayingAnimation {
+                Image(["puppy_playing_1", "puppy_playing_2"].randomElement() ?? "puppy_playing_1")
+                    .resizable()
+                    .scaledToFit()
+                    .frame(height: 200)
+            } else if viewModel.showPettingAnimation {
+                Image(["puppy_pet", "puppy_pet_1"].randomElement() ?? "puppy_pet")
+                    .resizable()
+                    .scaledToFit()
+                    .frame(height: 200)
+            } else if viewModel.puppyHunger < 30 {
+                Image("puppy_hungry_1.")
+                    .resizable()
+                    .scaledToFit()
+                    .frame(height: 200)
+            } else if viewModel.puppyHappiness < 30 {
+                Image("puppy_sad_1")
+                    .resizable()
+                    .scaledToFit()
+                    .frame(height: 200)
+            } else if viewModel.puppyHappiness > 80 {
+                Image(["puppy_happy_1", "puppy_happy_2"].randomElement() ?? "puppy_happy_1")
+                    .resizable()
+                    .scaledToFit()
+                    .frame(height: 200)
+            } else {
+                Image("puppy")
+                    .resizable()
+                    .scaledToFit()
+                    .frame(height: 200)
+            }
         }
-        .padding()
-        .background(Color(UIColor.secondarySystemGroupedBackground))
-        .cornerRadius(16)
-        .shadow(radius: 2)
+        .animation(.easeInOut(duration: 0.5), value: viewModel.showEatingAnimation)
+        .animation(.easeInOut(duration: 0.5), value: viewModel.showPlayingAnimation)
+        .animation(.easeInOut(duration: 0.5), value: viewModel.showPettingAnimation)
+    }
+    
+    // うんちの表示
+    private var poopView: some View {
+        VStack {
+            Spacer()
+            HStack(spacing: 5) {
+                ForEach(0..<min(viewModel.poopCount, 5), id: \.self) { index in
+                    Image("poop")
+                        .resizable()
+                        .scaledToFit()
+                        .frame(width: 40, height: 40)
+                        .offset(y: -20)
+                        .offset(x: CGFloat((index - 2) * 20))
+                }
+            }
+            .frame(height: 40)
+        }
+        .padding(.bottom, 20)
     }
     
     // ステータスバー
-    private func statusBar(title: String, value: Int, maxValue: Int, icon: String, color: Color) -> some View {
-        VStack(alignment: .leading, spacing: 8) {
+    private var statusBarsView: some View {
+        VStack(spacing: 15) {
+            // 満腹度
+            statusBar(
+                label: "おなか",
+                value: viewModel.puppyHunger,
+                icon: "fork.knife",
+                color: statusColor(for: viewModel.puppyHunger)
+            )
+            
+            // 機嫌
+            statusBar(
+                label: "きもち",
+                value: viewModel.puppyHappiness,
+                icon: "heart.fill",
+                color: statusColor(for: viewModel.puppyHappiness)
+            )
+        }
+        .padding()
+        .background(Color.white.opacity(0.8))
+        .cornerRadius(15)
+    }
+    
+    // 個別のステータスバー
+    private func statusBar(label: String, value: Double, icon: String, color: Color) -> some View {
+        VStack(alignment: .leading, spacing: 5) {
             HStack {
                 Image(systemName: icon)
                     .foregroundColor(color)
                 
-                Text(title)
+                Text(label)
                     .font(.headline)
+                    .foregroundColor(.primary)
                 
                 Spacer()
                 
-                Text("\(value)/\(maxValue)")
+                Text("\(Int(value))%")
                     .font(.subheadline)
                     .foregroundColor(.secondary)
             }
@@ -139,80 +212,183 @@ struct AnimalCareView: View {
                 ZStack(alignment: .leading) {
                     // バックグラウンド
                     Rectangle()
-                        .foregroundColor(Color.gray.opacity(0.3))
-                        .frame(width: geometry.size.width, height: 12)
-                        .cornerRadius(6)
+                        .foregroundColor(Color.gray.opacity(0.2))
+                        .frame(width: geometry.size.width, height: 10)
+                        .cornerRadius(5)
                     
                     // フィルバー
                     Rectangle()
                         .foregroundColor(color)
-                        .frame(width: geometry.size.width * CGFloat(value) / CGFloat(maxValue), height: 12)
-                        .cornerRadius(6)
+                        .frame(width: geometry.size.width * CGFloat(value) / 100, height: 10)
+                        .cornerRadius(5)
                 }
             }
-            .frame(height: 12)
+            .frame(height: 10)
         }
     }
     
     // アクションボタン
-    private func actionButtons(_ animal: Animal) -> some View {
-        VStack(spacing: 16) {
-            HStack(spacing: 16) {
-                // 餌やりボタン
-                actionButton(
-                    title: "えさをあげる",
-                    icon: "fork.knife",
-                    color: .orange,
-                    action: { viewModel.feedAnimal() },
-                    disabled: animal.hunger >= 100
-                )
-                
-                // 遊ぶボタン
-                actionButton(
-                    title: "あそぶ",
-                    icon: "figure.play",
-                    color: .green,
-                    action: { viewModel.playWithAnimal() },
-                    disabled: animal.hunger <= 10
-                )
-            }
+    private var actionButtonsView: some View {
+        HStack(spacing: 15) {
+            // 餌やりボタン
+            actionButton(
+                imageNamed: "icon_feed",
+                label: "餌やり",
+                action: { viewModel.feedPuppy() }
+            )
+            
+            // 遊ぶボタン
+            actionButton(
+                imageNamed: "icon_play",
+                label: "遊ぶ",
+                action: { viewModel.playWithPuppy() }
+            )
             
             // 撫でるボタン
             actionButton(
-                title: "なでる",
-                icon: "hand.tap.fill",
-                color: .purple,
-                action: { viewModel.petAnimal() },
-                disabled: false,
-                isFullWidth: true
+                imageNamed: "icon_pet",
+                label: "なでる",
+                action: {
+                    // なでるアニメーションの表示
+                    viewModel.showPettingAnimation = true
+                    // 機嫌を少し上げる
+                    viewModel.puppyHappiness = min(viewModel.puppyHappiness + 10, 100)
+                    // 操作時間を更新
+                    viewModel.updateLastInteraction()
+                    
+                    // 2秒後にアニメーションを終了
+                    DispatchQueue.main.asyncAfter(deadline: .now() + 2.0) {
+                        viewModel.showPettingAnimation = false
+                    }
+                }
+            )
+            
+            // 掃除ボタン
+            actionButton(
+                imageNamed: "icon_clean",
+                label: "掃除",
+                action: { viewModel.cleanPoops() },
+                disabled: viewModel.poopCount == 0
             )
         }
+        .padding()
+        .background(Color.white.opacity(0.8))
+        .cornerRadius(15)
     }
     
     // アクションボタンのコンポーネント
     private func actionButton(
-        title: String,
-        icon: String,
-        color: Color,
+        imageNamed: String,
+        label: String,
         action: @escaping () -> Void,
-        disabled: Bool,
-        isFullWidth: Bool = false
+        disabled: Bool = false
     ) -> some View {
         Button(action: action) {
-            HStack {
-                Image(systemName: icon)
-                    .font(.system(size: 16))
+            VStack(spacing: 5) {
+                Image(imageNamed)
+                    .resizable()
+                    .scaledToFit()
+                    .frame(width: 40, height: 40)
                 
-                Text(title)
-                    .fontWeight(.semibold)
+                Text(label)
+                    .font(.caption)
+                    .fontWeight(.medium)
             }
-            .padding()
-            .frame(maxWidth: isFullWidth ? .infinity : .none)
-            .background(disabled ? Color.gray.opacity(0.3) : color)
-            .foregroundColor(.white)
-            .cornerRadius(12)
+            .frame(width: 70, height: 70)
+            .foregroundColor(disabled ? .gray : .primary)
         }
         .disabled(disabled)
-        .frame(maxWidth: isFullWidth ? .infinity : .none)
+    }
+    
+    // 子犬が不在のオーバーレイ
+    private var missingPuppyOverlay: some View {
+        ZStack {
+            Color.black.opacity(0.7)
+                .ignoresSafeArea()
+            
+            VStack(spacing: 20) {
+                Text("子犬がいなくなりました...")
+                    .font(.title2)
+                    .foregroundColor(.white)
+                
+                Text("長い間会いに来てくれなかったので\n子犬は新しい家族を探しに行ったようです")
+                    .multilineTextAlignment(.center)
+                    .foregroundColor(.white.opacity(0.8))
+                
+                Button {
+                    viewModel.resetPuppyAdoption()
+                } label: {
+                    Text("新しい子犬を迎える")
+                        .fontWeight(.bold)
+                        .padding()
+                        .background(Color.blue)
+                        .foregroundColor(.white)
+                        .cornerRadius(10)
+                }
+                .padding(.top, 20)
+            }
+            .padding()
+        }
+    }
+    
+    // 名前入力オーバーレイ
+    @State private var puppyNameInput: String = ""
+    private var nameInputOverlay: some View {
+        ZStack {
+            Color.black.opacity(0.7)
+                .ignoresSafeArea()
+            
+            VStack(spacing: 20) {
+                Text("新しい子犬がやってきました！")
+                    .font(.title2)
+                    .foregroundColor(.white)
+                
+                Image("puppy_happy_1")
+                    .resizable()
+                    .scaledToFit()
+                    .frame(height: 150)
+                
+                Text("名前をつけてあげましょう")
+                    .foregroundColor(.white)
+                
+                TextField("子犬の名前", text: $puppyNameInput)
+                    .textFieldStyle(RoundedBorderTextFieldStyle())
+                    .padding(.horizontal)
+                
+                Button {
+                    if !puppyNameInput.isEmpty {
+                        viewModel.savePuppyName(puppyNameInput)
+                        viewModel.savePuppyAdoptionDate(Date())
+                    }
+                } label: {
+                    Text("決定")
+                        .fontWeight(.bold)
+                        .padding()
+                        .frame(width: 150)
+                        .background(puppyNameInput.isEmpty ? Color.gray : Color.blue)
+                        .foregroundColor(.white)
+                        .cornerRadius(10)
+                }
+                .disabled(puppyNameInput.isEmpty)
+                .padding(.top, 10)
+            }
+            .padding(30)
+            .background(Color.white.opacity(0.2))
+            .cornerRadius(20)
+            .padding()
+        }
+    }
+    
+    // ステータス値に応じた色を取得
+    private func statusColor(for value: Double) -> Color {
+        if value > 80 {
+            return .green
+        } else if value > 50 {
+            return .blue
+        } else if value > 30 {
+            return .orange
+        } else {
+            return .red
+        }
     }
 } 

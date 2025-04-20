@@ -120,6 +120,14 @@ struct Animal: Identifiable, Codable {
     var happiness: Int = 70
     private var lastCareTime: Date = Date()
     
+    init(name: String, type: AnimalType) {
+        self.name = name
+        self.type = type
+        self.hunger = 70
+        self.happiness = 70
+        self.lastCareTime = Date()
+    }
+    
     // 現在の状態を計算
     var currentState: AnimalState {
         if hunger < 30 {

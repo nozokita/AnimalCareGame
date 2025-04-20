@@ -1,36 +1,10 @@
-import Foundation
 import SwiftUI
-import Combine
 import AVFoundation
+import Combine
 
-class AnimalCareViewModel: ObservableObject {
-    // 動物のリスト
-    @Published var animals: [Animal] = []
-    
-    // 選択されている動物
-    @Published var selectedAnimal: Animal?
-    
-    // アニメーション状態
-    @Published var showAnimation = false
-    @Published var animationState: AnimalState = .normal
-    
-    // アクション状態
-    @Published var isFeeding: Bool = false
-    @Published var isPlaying: Bool = false
-    @Published var isPetting: Bool = false
-    
-    // サウンド設定
-    @Published var isSoundEnabled: Bool = true
-    
-    // データ保存キー
-    private let saveKey = "savedAnimals"
-    private let soundEnabledKey = "soundEnabled"
-    
-    // タイマー
-    private var statusTimer: Timer?
-    
-    // MARK: - 子犬のお世話関連のプロパティ (GameViewModel互換)
-    // 子犬の状態
+// MARK: - GameViewModel クラス
+class GameViewModel: ObservableObject {
+    // MARK: - Animal Care Properties
     @Published var puppyHunger: Double = 80
     @Published var puppyHappiness: Double = 80
     @Published var lastAnimalCareTime: Date = Date()
@@ -55,215 +29,31 @@ class AnimalCareViewModel: ObservableObject {
     // 時間帯関連の状態管理
     @Published var isDaytime: Bool = true
     private var timeOfDayTimer: Timer?
-    
-    // ゲーム状態
+
+    // MARK: - Game State
     @Published var gameState: GameState = .initialSelection
+
+    // MARK: - Game Properties
     @Published var currentGameMode: GameMode = .shopping
     @Published var currentShopType: ShopType = .fruitStand
     
+    // MARK: - Initialization
     init() {
-        loadAnimals()
-        loadSoundPreference()
-        setupTimer()
-        initializePuppyInfo() // 子犬の情報も初期化
+        initializePuppyInfo()
     }
     
     deinit {
         stopTimeOfDayTimer()
     }
     
-    // タイマーセットアップ（1時間ごとに状態を更新）
-    private func setupTimer() {
-        statusTimer = Timer.scheduledTimer(withTimeInterval: 3600, repeats: true) { [weak self] _ in
-            self?.updateAllAnimalsStatus()
-        }
-    }
-    
-    // データを保存
-    private func saveAnimals() {
-        if let encoded = try? JSONEncoder().encode(animals) {
-            UserDefaults.standard.set(encoded, forKey: saveKey)
-        }
-    }
-    
-    // データを読み込み
-    private func loadAnimals() {
-        if let data = UserDefaults.standard.data(forKey: saveKey),
-           let decoded = try? JSONDecoder().decode([Animal].self, from: data) {
-            animals = decoded
-            
-            // 最初の動物を選択する（存在する場合）
-            if !animals.isEmpty {
-                selectedAnimal = animals[0]
-            }
-        }
-    }
-    
-    // サウンド設定を保存
-    private func saveSoundPreference() {
-        UserDefaults.standard.set(isSoundEnabled, forKey: soundEnabledKey)
-    }
-    
-    // サウンド設定を読み込み
-    private func loadSoundPreference() {
-        isSoundEnabled = UserDefaults.standard.bool(forKey: soundEnabledKey)
-    }
-    
-    // アニメーション表示
-    func showAnimationFor(state: AnimalState, duration: Double = 2.0) {
-        animationState = state
-        showAnimation = true
-        
-        // 設定時間後にアニメーションを終了
-        DispatchQueue.main.asyncAfter(deadline: .now() + duration) { [weak self] in
-            self?.showAnimation = false
-        }
-    }
-    
-    // すべての動物の状態を更新
-    func updateAllAnimalsStatus() {
-        for index in animals.indices {
-            animals[index].updateStatus()
-        }
-        
-        // 選択された動物も更新
-        if let selectedIndex = animals.firstIndex(where: { $0.id == selectedAnimal?.id }) {
-            selectedAnimal = animals[selectedIndex]
-        }
-        
-        saveAnimals()
-    }
-    
-    // 新しい動物を作成
-    func createAnimal(name: String, type: AnimalType) {
-        let newAnimal = Animal(name: name, type: type)
-        animals.append(newAnimal)
-        selectedAnimal = newAnimal
-        saveAnimals()
-    }
-    
-    // 動物を選択
-    func selectAnimal(_ animal: Animal) {
-        selectedAnimal = animal
-    }
-    
-    // 動物を削除
-    func deleteAnimal(_ animal: Animal) {
-        animals.removeAll { $0.id == animal.id }
-        
-        // 選択されていた動物が削除された場合、別の動物を選択
-        if selectedAnimal?.id == animal.id {
-            selectedAnimal = animals.first
-        }
-        
-        saveAnimals()
-    }
-    
-    // 動物に餌をやる
-    func feedAnimal() {
-        guard var animal = selectedAnimal else { return }
-        
-        // 動物に餌をあげる
-        animal.feed()
-        
-        // アニメーションフラグを設定
-        isFeeding = true
-        showAnimationFor(state: .eating)
-        
-        // アニメーションが終わったらフラグをリセット
-        DispatchQueue.main.asyncAfter(deadline: .now() + 2.0) { [weak self] in
-            self?.isFeeding = false
-        }
-        
-        // サウンド効果を再生（実装が必要）
-        if isSoundEnabled {
-            playSound("eating")
-        }
-        
-        // 動物のリストを更新
-        updateAnimalInList(animal)
-    }
-    
-    // 動物と遊ぶ
-    func playWithAnimal() {
-        guard var animal = selectedAnimal else { return }
-        
-        // 動物と遊ぶ
-        animal.play()
-        
-        // アニメーションフラグを設定
-        isPlaying = true
-        showAnimationFor(state: .playing)
-        
-        // アニメーションが終わったらフラグをリセット
-        DispatchQueue.main.asyncAfter(deadline: .now() + 2.0) { [weak self] in
-            self?.isPlaying = false
-        }
-        
-        // サウンド効果を再生（実装が必要）
-        if isSoundEnabled {
-            playSound("playing")
-        }
-        
-        // 動物のリストを更新
-        updateAnimalInList(animal)
-    }
-    
-    // 動物をなでる
-    func petAnimal() {
-        guard var animal = selectedAnimal else { return }
-        
-        // 動物をなでる
-        animal.pet()
-        
-        // アニメーションフラグを設定
-        isPetting = true
-        showAnimationFor(state: .petting, duration: 1.5)
-        
-        // アニメーションが終わったらフラグをリセット
-        DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) { [weak self] in
-            self?.isPetting = false
-        }
-        
-        // サウンド効果を再生（実装が必要）
-        if isSoundEnabled {
-            playSound("petting")
-        }
-        
-        // 動物のリストを更新
-        updateAnimalInList(animal)
-    }
-    
-    // リスト内の動物を更新
-    private func updateAnimalInList(_ updatedAnimal: Animal) {
-        if let index = animals.firstIndex(where: { $0.id == updatedAnimal.id }) {
-            animals[index] = updatedAnimal
-            selectedAnimal = updatedAnimal
-            saveAnimals()
-        }
-    }
-    
-    // サウンド効果の有効/無効を切り替え
-    func toggleSound() {
-        isSoundEnabled.toggle()
-        saveSoundPreference()
-    }
-    
-    // サウンドを再生（実際の実装はプラットフォームに依存）
-    private func playSound(_ name: String) {
-        // 実際のサウンド再生コードはここに実装
-        // 例: AVAudioPlayerを使用
-    }
-    
-    // MARK: - GameViewModel互換メソッド
-    
-    // Navigation Methods
+    // MARK: - Navigation Methods
     func returnToModeSelection() {
         gameState = .initialSelection
     }
     
     func startAnimalCareMode() {
         gameState = .animalCare
+        // タイマーなどのリセット処理
     }
     
     // MARK: - Animal Care Methods
@@ -509,5 +299,58 @@ class AnimalCareViewModel: ObservableObject {
         
         // 子犬が去ったかどうかをチェック
         checkPuppyMissing()
+    }
+}
+
+// MARK: - Enum Types
+// ゲームの状態を表すEnum
+enum GameState {
+    case initialSelection // 追加: 最初のモード選択画面
+    case modeSelection    // 既存: お店屋さんモードの詳細選択
+    case playing          // 既存: お店屋さんモードプレイ中
+    case playingCustomer  // 追加: お客さんモードプレイ中
+    case animalCare       // 追加: どうぶつのおへや
+    case result
+}
+
+// ゲームモードを表すEnum
+enum GameMode: CaseIterable {
+    case shopping // 通常のお買い物モード
+    case calculationQuiz // 簡単な計算モード
+    case priceQuiz // 金額計算モード
+    case listeningQuiz // リスニングクイズモード
+}
+
+// お店の種類を表すEnum
+enum ShopType: String, CaseIterable, Identifiable {
+    case fruitStand // 果物屋
+    case bakery     // パン屋
+    case cakeShop   // ケーキ屋
+    case restaurant // レストラン
+    
+    var id: String { rawValue }
+    
+    // 表示名を返す
+    func localizedName(language: String) -> String {
+        switch self {
+        case .fruitStand:
+            return language == "ja" ? "くだものや" : "Fruit Stand"
+        case .bakery:
+            return language == "ja" ? "パンや" : "Bakery"
+        case .cakeShop:
+            return language == "ja" ? "ケーキや" : "Cake Shop"
+        case .restaurant:
+            return language == "ja" ? "レストラン" : "Restaurant"
+        }
+    }
+    
+    // 画像名を返す
+    var imageName: String {
+        switch self {
+        case .fruitStand: return "shop_fruit"
+        case .bakery: return "shop_bakery"
+        case .cakeShop: return "shop_cake"
+        case .restaurant: return "shop_restaurant"
+        }
     }
 } 
